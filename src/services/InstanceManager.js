@@ -36,14 +36,7 @@ class InstanceManager {
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
                     '--no-zygote',
-                    '--single-process',
-                    '--disable-gpu',
-                    '--disable-canvas-aa',
-                    '--disable-2d-canvas-clip-utils',
-                    '--disable-gl-drawing-for-tests',
-                    '--disable-dev-shm-usage',
-                    '--js-flags="--max-old-space-size=512"', // Limit JS heap per instance
-                    '--no-pings'
+                    '--disable-gpu'
                 ],
                 handleSIGINT: false
             }
@@ -73,18 +66,8 @@ class InstanceManager {
         });
 
         client.on('message', async (msg) => {
-            try {
-                // Queue the incoming message for processing
-                await queueService.addIncoming(id, {
-                    from: msg.from,
-                    body: msg.body,
-                    timestamp: msg.timestamp
-                });
-                
-                await botLogic.handleMessage(client, msg);
-            } catch (error) {
-                console.error(`[Instance ${id}] Error processing message:`, error);
-            }
+            // Processing via in-memory queue (handles concurrency per user)
+            queueService.processMessage(id, client, msg);
         });
 
         client.on('disconnected', (reason) => {
