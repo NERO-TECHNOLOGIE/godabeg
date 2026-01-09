@@ -225,6 +225,13 @@ class BotLogic {
                 let msg = `✅ Inscription réussie *${data.nom} ${data.prenom}* !\n\n`;
                 msg += "Vous pouvez maintenant soumettre vos résultats.\n\n";
                 await client.sendMessage(fullId, msg);
+
+                // IMPORTANT: Authenticate the user so showMainMenu knows they are logged in
+                try {
+                    await apiService.authenticate(from);
+                } catch (authErr) {
+                    console.log("[BotLogic] Auto-auth failed after existing registration:", authErr);
+                }
                 
                 return this.showMainMenu(client, fullId);
             }
