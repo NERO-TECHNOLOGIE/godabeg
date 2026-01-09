@@ -210,9 +210,27 @@ class BotLogic {
             // Directly show main menu with submission options
             return this.showMainMenu(client, fullId);
         } catch (error) {
-            console.error('[BotLogic] Registration failed:', error);
+            console.error('[BotLogic] Registration error:', error.message);
+            
+            // Check if error is due to user already existing
+            const errorStr = typeof error.message === 'string' ? error.message : JSON.stringify(error);
+            if (errorStr.includes('telephone') && errorStr.includes('already been taken') || 
+                errorStr.includes('whatsapp') && errorStr.includes('already been taken')) {
+                
+                stateService.clearState(from);
+                stateService.addData(from, 'disclaimer_accepted', true);
+                
+                // Show success message as requested, even if they were already in DB
+                // We use the data they just entered to greet them
+                let msg = `✅ Inscription réussie *${data.nom} ${data.prenom}* !\n\n`;
+                msg += "Vous pouvez maintenant soumettre vos résultats.\n\n";
+                await client.sendMessage(fullId, msg);
+                
+                return this.showMainMenu(client, fullId);
+            }
+
             stateService.clearState(from);
-            return client.sendMessage(fullId, "❌ Erreur lors de l'inscription. Veuillez réessayer.");
+            return client.sendMessage(fullId, "❌ Erreur lors de l'inscription. Si le problème persiste, contactez le support.");
         }
     }
 
