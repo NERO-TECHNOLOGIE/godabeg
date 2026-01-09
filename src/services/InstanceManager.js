@@ -36,7 +36,14 @@ class InstanceManager {
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
                     '--no-zygote',
-                    '--disable-gpu'
+                    '--single-process',
+                    '--disable-gpu',
+                    '--disable-canvas-aa',
+                    '--disable-2d-canvas-clip-utils',
+                    '--disable-gl-drawing-for-tests',
+                    '--disable-dev-shm-usage',
+                    '--js-flags="--max-old-space-size=512"', // Limit JS heap per instance
+                    '--no-pings'
                 ],
                 handleSIGINT: false
             }
