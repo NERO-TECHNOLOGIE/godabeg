@@ -66,18 +66,8 @@ class InstanceManager {
         });
 
         client.on('message', async (msg) => {
-            try {
-                // Queue the incoming message for processing
-                await queueService.addIncoming(id, {
-                    from: msg.from,
-                    body: msg.body,
-                    timestamp: msg.timestamp
-                });
-                
-                await botLogic.handleMessage(client, msg);
-            } catch (error) {
-                console.error(`[Instance ${id}] Error processing message:`, error);
-            }
+            // Processing via in-memory queue (handles concurrency per user)
+            queueService.processMessage(id, client, msg);
         });
 
         client.on('disconnected', (reason) => {

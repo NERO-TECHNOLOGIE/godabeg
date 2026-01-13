@@ -45,8 +45,8 @@ class BotLogic {
                     ['bulletins_nuls', 'party_votes', 'pv_upload'].includes(currentStep));
 
                 if (!isSubmissionValue) {
-                    await client.sendMessage(fullId, "❌ Opération annulée.");
-                    return this.showMainMenu(client, fullId);
+                    stateService.clearState(from);
+                    return client.sendMessage(fullId, "❌ Opération annulée.\n\nEnvoyez un nouveau message pour revenir au menu d'accueil merci.");
                 }
             }
 
@@ -112,10 +112,15 @@ class BotLogic {
         try {
             user = await apiService.authenticate(from);
         } catch (error) {
-            console.log(`[BotLogic] User not found for ${from}`);
+            console.error(`[BotLogic] Auth error for ${from}:`, error.message);
+            // If it's not a 404 (User not found), it's a real error (500, etc)
+            // We should NOT send them to registration in this case
+            if (!error.message.includes('User not found') && !error.message.includes('404')) {
+                return client.sendMessage(fullId, "⚠️ Problème de connexion au serveur (Erreur technique). Veuillez contacter le support ou réessayer plus tard.");
+            }
         }
         
-        // If user doesn't exist and hasn't accepted disclaimer, show disclaimer
+        // If user doesn't exist (and no server error) and hasn't accepted disclaimer, show disclaimer
         if (!user) {
             const hasAcceptedDisclaimer = stateService.getData(from, 'disclaimer_accepted', false);
             if (!hasAcceptedDisclaimer) {
@@ -210,9 +215,34 @@ class BotLogic {
             // Directly show main menu with submission options
             return this.showMainMenu(client, fullId);
         } catch (error) {
-            console.error('[BotLogic] Registration failed:', error);
+            console.error('[BotLogic] Registration error:', error.message);
+            
+            // Check if error is due to user already existing
+            const errorStr = typeof error.message === 'string' ? error.message : JSON.stringify(error);
+            if (errorStr.includes('telephone') && errorStr.includes('already been taken') || 
+                errorStr.includes('whatsapp') && errorStr.includes('already been taken')) {
+                
+                stateService.clearState(from);
+                stateService.addData(from, 'disclaimer_accepted', true);
+                
+                // Show success message as requested, even if they were already in DB
+                // We use the data they just entered to greet them
+                let msg = `✅ Inscription réussie *${data.nom} ${data.prenom}* !\n\n`;
+                msg += "Vous pouvez maintenant soumettre vos résultats.\n\n";
+                await client.sendMessage(fullId, msg);
+
+                // IMPORTANT: Authenticate the user so showMainMenu knows they are logged in
+                try {
+                    await apiService.authenticate(from);
+                } catch (authErr) {
+                    console.log("[BotLogic] Auto-auth failed after existing registration:", authErr);
+                }
+                
+                return this.showMainMenu(client, fullId);
+            }
+
             stateService.clearState(from);
-            return client.sendMessage(fullId, "❌ Erreur lors de l'inscription. Veuillez réessayer.");
+            return client.sendMessage(fullId, "❌ Erreur lors de l'inscription. Si le problème persiste, contactez le support.");
         }
     }
 
@@ -455,16 +485,17 @@ class BotLogic {
                 if (text === '1') {
                     return this.saveResults(client, fullId);
                 } else {
-                    await client.sendMessage(fullId, "❌ Opération annulée.");
-                    return this.showMainMenu(client, fullId);
+                    stateService.clearState(from);
+                    return client.sendMessage(fullId, "❌ Opération annulée.");
                 }
 
             case 'pv_upload':
                 if (text === '0') {
-                    await client.sendMessage(fullId, "✅ Opération terminée !");
+                    stateService.clearState(from);
                     return this.showMainMenu(client, fullId);
+                } else {
+                    return client.sendMessage(fullId, "📸 Veuillez envoyer la *PHOTO du PV* ou tapez *0* pour terminer sans photo.");
                 }
-                return client.sendMessage(fullId, "📸 Veuillez envoyer la *PHOTO du PV* ou taper *0* pour terminer sans photo.");
         }
     }
 
@@ -603,8 +634,8 @@ class BotLogic {
                 poste_vote_id: data.poste_vote_id || null
             }, from);
 
-            await client.sendMessage(fullId, "✅ Image du PV sauvegardée !");
-            return this.showMainMenu(client, fullId);
+            stateService.clearState(from);
+            return client.sendMessage(fullId, "✅ Image du PV sauvegardée !\n\nEnvoyez un nouveau message pour revenir au menu d'accueil merci.");
 
         } catch (error) {
             console.error("[BotLogic] Media upload error:", error);

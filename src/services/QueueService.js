@@ -1,54 +1,52 @@
-import Queue from 'bull';
-import dotenv from 'dotenv';
-import path from 'path';
-
-dotenv.config({ path: path.join(process.cwd(), '.env') });
+import botLogic from './BotLogic.js';
 
 class QueueService {
     constructor() {
-        this.redisConfig = {
-            host: process.env.REDIS_HOST || '127.0.0.1',
-            port: process.env.REDIS_PORT || 6379,
-            password: process.env.REDIS_PASSWORD || undefined
-        };
+        // Map to store promise chains for each user to ensure sequential processing
+        this.userQueues = new Map();
+    }
 
-        // Queue for processing incoming messages
-        this.incomingQueue = new Queue('incoming-messages', { redis: this.redisConfig });
+    /**
+     * Process an incoming message using an in-memory queue.
+     * Ensures that messages from the same user are processed one by one.
+     */
+    async processMessage(instanceId, client, msg) {
+        const userId = msg.from;
+
+        console.log(`[Queue] Scheduling message from ${userId}`);
+
+        // Initialize queue for user if it doesn't exist
+        if (!this.userQueues.has(userId)) {
+            this.userQueues.set(userId, Promise.resolve());
+        }
+
+        // Chain the new task to the user's existing promise chain
+        const task = this.userQueues.get(userId).then(async () => {
+            try {
+                // Simulate a small delay/yield to event loop if needed
+                // await new Promise(r => setImmediate(r));
+                await botLogic.handleMessage(client, msg);
+            } catch (error) {
+                console.error(`[Queue] Error processing message from ${userId}:`, error);
+            }
+        });
+
+        // Update the user's queue with the new tail promise
+        // We catch errors here to ensure the chain doesn't break for future messages
+        const safeTask = task.catch(err => console.error("Queue chain error:", err));
+        this.userQueues.set(userId, safeTask);
         
-        // Queue for sending replies
-        this.outgoingQueue = new Queue('outgoing-replies', { redis: this.redisConfig });
-
-        this.setupProcessors();
+        // Return the promise in case caller wants to await it (though usually fire-and-forget for the listener)
+        return safeTask;
     }
 
-    setupProcessors() {
-        // Incoming message processor
-        this.incomingQueue.process(async (job) => {
-            const { instanceId, messageData } = job.data;
-            // This will call BotLogic.handleMessage but via the queue
-            console.log(`[Queue] Processing incoming for instance ${instanceId}`);
-            // Logic to be linked in Manager
-        });
-
-        // Outgoing reply processor with human-like delay
-        this.outgoingQueue.process(async (job) => {
-            const { instanceId, chatId, text, options } = job.data;
-            
-            // Artificial delay (5 seconds as requested)
-            const delay = 10000; 
-            await new Promise(resolve => setTimeout(resolve, delay));
-            
-            // Logic to send actual message will be handled by providing the client to this service
-            console.log(`[Queue] Sending reply for instance ${instanceId} after delay`);
-        });
-    }
-
-    async addIncoming(instanceId, messageData) {
-        await this.incomingQueue.add({ instanceId, messageData });
+    // Kept for compatibility but not used or implemented with Redis anymore
+    async addIncoming(instanceId, data) {
+        console.warn("[QueueService] addIncoming is deprecated. Use processMessage instead.");
     }
 
     async addOutgoing(instanceId, chatId, text, options = {}) {
-        await this.outgoingQueue.add({ instanceId, chatId, text, options });
+       console.warn("[QueueService] addOutgoing is not implemented in memory queue.");
     }
 }
 
